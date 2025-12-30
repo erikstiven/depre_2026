@@ -468,7 +468,7 @@ function generar($aForm = '')
     $mes_desde = $aForm['mes_desde'];
     $anio_hasta = $aForm['anio_hasta'];
     $mes_hasta = $aForm['mes_hasta'];
-    $reprocesar = $aForm['reprocesar'] ?? '';
+    $reprocesar = $aForm['reprocesar'];
     $fechaServer = date("Y-m-d");
 
     if (empty($anio_desde) || empty($mes_desde) || empty($anio_hasta) || empty($mes_hasta)) {
@@ -576,14 +576,14 @@ function generar($aForm = '')
                                   and act_cod_sucu = $sucursal
                                   and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
                         $total_existente = intval(consulta_string($sql_contar_reproceso, 'total', $oIfx, 0));
-                        if ($total_existente > 0) {
-                            $total_reprocesados++;
-                            $sql_delete_reproceso = "delete from saecdep
+                        $sql_delete_reproceso = "delete from saecdep
                                 where cdep_cod_acti = $codigo_activo
                                   and act_cod_empr = $empresa
                                   and act_cod_sucu = $sucursal
                                   and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
-                            $oIfx->QueryT($sql_delete_reproceso);
+                        $oIfx->QueryT($sql_delete_reproceso);
+                        if ($total_existente > 0) {
+                            $total_reprocesados++;
                         }
                     }
 

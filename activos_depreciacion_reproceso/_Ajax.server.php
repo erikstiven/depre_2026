@@ -468,6 +468,7 @@ function generar($aForm = '')
     $mes_desde = $aForm['mes_desde'];
     $anio_hasta = $aForm['anio_hasta'];
     $mes_hasta = $aForm['mes_hasta'];
+    $reprocesar = $aForm['reprocesar'] ?? '';
     $fechaServer = date("Y-m-d");
 
     if (empty($anio_desde) || empty($mes_desde) || empty($anio_hasta) || empty($mes_hasta)) {
@@ -549,6 +550,7 @@ function generar($aForm = '')
                 $total_evaluados = 0;
                 $total_procesados = 0;
                 $total_omitidos = 0;
+                $total_reprocesados = 0;
                 $alertas_pendientes = [];
                 do {
                     // LEER DATOS AVTIVO
@@ -565,6 +567,25 @@ function generar($aForm = '')
                     $sucursal           =     $oIfxA->f('act_cod_sucu');
                     $clave_activo       =     $oIfxA->f('act_clave_act');
                     $nombre_activo      =     $oIfxA->f('act_nom_act');
+
+                    if ($reprocesar === 'S') {
+                        $sql_contar_reproceso = "select count(*) as total
+                                from saecdep
+                                where cdep_cod_acti = $codigo_activo
+                                  and act_cod_empr = $empresa
+                                  and act_cod_sucu = $sucursal
+                                  and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
+                        $total_existente = intval(consulta_string($sql_contar_reproceso, 'total', $oIfx, 0));
+                        if ($total_existente > 0) {
+                            $total_reprocesados++;
+                            $sql_delete_reproceso = "delete from saecdep
+                                where cdep_cod_acti = $codigo_activo
+                                  and act_cod_empr = $empresa
+                                  and act_cod_sucu = $sucursal
+                                  and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
+                            $oIfx->QueryT($sql_delete_reproceso);
+                        }
+                    }
 
                     $intervalo = $arrayTipoDepre[$tipo_depreciacion] ?? '';
                     if (empty($intervalo)) {
@@ -765,6 +786,7 @@ function generar($aForm = '')
                     . '<p><strong>Meses evaluados:</strong> ' . $total_evaluados . '</p>'
                     . '<p><strong>Procesados:</strong> ' . $total_procesados . '</p>'
                     . '<p><strong>Omitidos:</strong> ' . $total_omitidos . '</p>'
+                    . '<p><strong>Activos con reproceso:</strong> ' . $total_reprocesados . '</p>'
                     . '</div>'
                     . '</div>'
                     . $alerta_html
@@ -791,6 +813,7 @@ function generar($aForm = '')
                     . '<p><strong>Meses evaluados:</strong> 0</p>'
                     . '<p><strong>Procesados:</strong> 0</p>'
                     . '<p><strong>Omitidos:</strong> 0</p>'
+                    . '<p><strong>Activos con reproceso:</strong> 0</p>'
                     . '</div>'
                     . '</div>'
                     . '<div class="table-responsive" style="max-height: 300px; overflow: auto;">'

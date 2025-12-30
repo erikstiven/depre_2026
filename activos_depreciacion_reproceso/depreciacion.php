@@ -49,6 +49,13 @@
             if (document.getElementById("btnProcesar").getAttribute("data-disabled") === "true") {
                 return;
             }
+            var reprocesarCheckbox = document.getElementById("reprocesar");
+            if (reprocesarCheckbox && reprocesarCheckbox.checked) {
+                var confirmado = confirm("Esta acción eliminará la depreciación existente en el rango seleccionado antes de reprocesar. ¿Desea continuar?");
+                if (!confirmado) {
+                    return;
+                }
+            }
             if(ProcesarFormulario() == true){
                 xajax_generar(xajax.getFormValues("form1"));
             }
@@ -454,6 +461,14 @@
                             </div>
                         </div>
                         <div class="form-row"> 
+                            <div class="col-md-12">
+                                <div class="checkbox" style="margin-top: 0;">
+                                    <label for="reprocesar">
+                                        <input type="checkbox" id="reprocesar" name="reprocesar" value="S">
+                                        Eliminar depreciación existente en el rango antes de generar.
+                                    </label>
+                                </div>
+                            </div>
                             <div class="col-md-12">
                                     <div><label for="consultar">* Consultar:</label></div>
                                     <div id="btnProcesar" class="btn btn-primary btn-sm disabled" data-disabled="true" onclick="generar();" style="width: 100%">

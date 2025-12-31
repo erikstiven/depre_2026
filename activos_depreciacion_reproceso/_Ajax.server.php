@@ -552,6 +552,7 @@ function generar($aForm = '')
                 $total_procesados = 0;
                 $total_omitidos = 0;
                 $total_reprocesados = 0;
+                $total_eliminados = 0;
                 $alertas_pendientes = [];
                 do {
                     // LEER DATOS AVTIVO
@@ -587,6 +588,29 @@ function generar($aForm = '')
                             $total_reprocesados++;
                         }
                         if ($solo_borrar === 'S') {
+                            if ($total_existente > 0) {
+                                $total_eliminados++;
+                                $audit_log[] = [
+                                    'activo' => $clave_activo,
+                                    'nombre' => $nombre_activo,
+                                    'anio' => '',
+                                    'mes' => '',
+                                    'estado' => 'ELIMINADO',
+                                    'motivo' => 'REGISTROS BORRADOS: ' . $total_existente,
+                                    'estado_contable' => 'OK',
+                                ];
+                                $total_evaluados += $total_existente;
+                            } else {
+                                $audit_log[] = [
+                                    'activo' => $clave_activo,
+                                    'nombre' => $nombre_activo,
+                                    'anio' => '',
+                                    'mes' => '',
+                                    'estado' => 'SIN CAMBIOS',
+                                    'motivo' => 'SIN REGISTROS EN RANGO',
+                                    'estado_contable' => 'OK',
+                                ];
+                            }
                             continue;
                         }
                     }
@@ -766,11 +790,13 @@ function generar($aForm = '')
                 foreach ($audit_log as $fila) {
                     $clase_estado = $fila['estado'] === 'PROCESADO' ? 'label label-success' : 'label label-warning';
                     $clase_contable = $fila['estado_contable'] === 'OK' ? 'label label-success' : 'label label-danger';
+                    $anio_mostrar = $fila['anio'] === '' ? '--' : $fila['anio'];
+                    $mes_mostrar = $fila['mes'] === '' ? '--' : str_pad($fila['mes'], 2, '0', STR_PAD_LEFT);
                     $tabla_detalle .= '<tr>'
                         . '<td>' . htmlspecialchars($fila['activo'], ENT_QUOTES, 'UTF-8') . '</td>'
                         . '<td>' . htmlspecialchars($fila['nombre'], ENT_QUOTES, 'UTF-8') . '</td>'
-                        . '<td>' . $fila['anio'] . '</td>'
-                        . '<td>' . str_pad($fila['mes'], 2, '0', STR_PAD_LEFT) . '</td>'
+                        . '<td>' . $anio_mostrar . '</td>'
+                        . '<td>' . $mes_mostrar . '</td>'
                         . '<td><span class="' . $clase_estado . '">' . $fila['estado'] . '</span></td>'
                         . '<td>' . htmlspecialchars($fila['motivo'], ENT_QUOTES, 'UTF-8') . '</td>'
                         . '<td><span class="' . $clase_contable . '">' . $fila['estado_contable'] . '</span></td>'
@@ -791,6 +817,7 @@ function generar($aForm = '')
                     . '<p><strong>Procesados:</strong> ' . $total_procesados . '</p>'
                     . '<p><strong>Omitidos:</strong> ' . $total_omitidos . '</p>'
                     . '<p><strong>Activos con reproceso:</strong> ' . $total_reprocesados . '</p>'
+                    . '<p><strong>Activos con eliminación:</strong> ' . $total_eliminados . '</p>'
                     . '</div>'
                     . '</div>'
                     . $alerta_html
@@ -818,6 +845,7 @@ function generar($aForm = '')
                     . '<p><strong>Procesados:</strong> 0</p>'
                     . '<p><strong>Omitidos:</strong> 0</p>'
                     . '<p><strong>Activos con reproceso:</strong> 0</p>'
+                    . '<p><strong>Activos con eliminación:</strong> 0</p>'
                     . '</div>'
                     . '</div>'
                     . '<div class="table-responsive" style="max-height: 300px; overflow: auto;">'

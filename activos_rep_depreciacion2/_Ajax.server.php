@@ -718,10 +718,13 @@ function generar($aForm = '')
 		? '<span class="badge badge-info">Mes contable</span>'
 		: '<span class="badge badge-info">Mes real depreciado</span>';
 	$fuente_html = $foto_mes_contable == 'S'
-		? '<div class="alert alert-info"><strong>Fuente:</strong> cálculo contable desde <em>saeact</em> a la fecha de corte seleccionada (no usa histórico).</div>'
+		? '<div class="alert alert-info"><strong>Fuente:</strong> usa histórico en <em>saecdep</em> cuando existe; si no hay registros, calcula en base a <em>saeact</em> para la fecha de corte.</div>'
 		: '<div class="alert alert-warning"><strong>Fuente:</strong> histórico mensual registrado en <em>saecdep</em>.</div>';
+	$contexto_html = '<div class="alert alert-info"><strong>Rango:</strong> ' . $anio . '/' . str_pad($mes, 2, '0', STR_PAD_LEFT)
+		. ' - ' . $anio_fin . '/' . str_pad($mes_fin, 2, '0', STR_PAD_LEFT) . '</div>';
 	$html = '';
 	$html .= $fuente_html;
+	$html .= $contexto_html;
 	$html .= '<table class="table table-striped table-hover " id="tablaReporteDepreciacion" style="width: 100%; margin-bottom: 0px;">
 							<tr class="msgFrm">
 								<td class="bg-primary text-center"><h5> Clave </h5></td>
@@ -941,6 +944,24 @@ function generar($aForm = '')
 							) AS meses_base
 						FROM base
 						CROSS JOIN params p
+					),
+					historico AS (
+						SELECT
+							cdep_cod_acti,
+							act_cod_empr,
+							act_cod_sucu,
+							MAX(cdep_dep_acum) AS dep_acumulada,
+							MAX(
+								CASE
+									WHEN (cdep_ani_depr = $anio_fin AND cdep_mes_depr = $mes_fin)
+										THEN cdep_gas_depn
+									ELSE 0
+								END
+							) AS gasto_depreciacion
+						FROM saecdep
+						WHERE act_cod_empr = $empresa
+						  AND ((cdep_ani_depr * 100) + cdep_mes_depr) <= ($anio_fin * 100 + $mes_fin)
+						GROUP BY cdep_cod_acti, act_cod_empr, act_cod_sucu
 					)
 					SELECT
 						act_clave_act,
@@ -950,19 +971,40 @@ function generar($aForm = '')
 						ROUND(act_val_comp, 2) AS valor_compra,
 						ROUND(act_vres_act, 2) AS valor_residual,
 						ROUND(valor_neto, 2) AS valor_neto,
-						ROUND(depreciacion_mensual, 2) AS gasto_depreciacion,
-						ROUND(depreciacion_mensual * LEAST(GREATEST(meses_base, 0), vida_util_meses), 2) AS dep_acumulada,
+						ROUND(
+							COALESCE(historico.gasto_depreciacion, depreciacion_mensual),
+							2
+						) AS gasto_depreciacion,
+						ROUND(
+							COALESCE(
+								historico.dep_acumulada,
+								depreciacion_mensual * LEAST(GREATEST(meses_base, 0), vida_util_meses)
+							),
+							2
+						) AS dep_acumulada,
 						ROUND(
 							CASE
+								WHEN COALESCE(historico.dep_acumulada, 0) > 0
+									THEN COALESCE(historico.dep_acumulada, 0) - COALESCE(historico.gasto_depreciacion, 0)
 								WHEN LEAST(GREATEST(meses_base, 0), vida_util_meses) = 0 THEN 0
 								ELSE (depreciacion_mensual * LEAST(GREATEST(meses_base, 0), vida_util_meses)) - depreciacion_mensual
 							END,
 							2
 						) AS dep_anterior,
-						ROUND(act_val_comp - (depreciacion_mensual * LEAST(GREATEST(meses_base, 0), vida_util_meses)), 2) AS valor_por_depreciar,
+						ROUND(
+							(valor_neto - COALESCE(
+								historico.dep_acumulada,
+								depreciacion_mensual * LEAST(GREATEST(meses_base, 0), vida_util_meses)
+							)),
+							2
+						) AS valor_por_depreciar,
 						gact_des_gact,
 						sgac_des_sgac
 					FROM calculo
+					LEFT JOIN historico
+					  ON historico.cdep_cod_acti = calculo.act_cod_act
+					 AND historico.act_cod_empr = calculo.act_cod_empr
+					 AND historico.act_cod_sucu = calculo.act_cod_sucu
 					ORDER BY gact_des_gact, sgac_des_sgac, act_nom_act ";
 
 			if ($oIfx->Query($sql)) {

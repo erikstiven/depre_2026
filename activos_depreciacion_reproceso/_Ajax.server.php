@@ -745,10 +745,13 @@ function generar($aForm = '')
                                     $valor_anterior = $valor_acumulado - $valor_mesual;
                                 }
 
-                                if (!$depreciacion_valida) {
+                                if ($valor_mesual <= 0) {
+                                    $estado = 'OMITIDO';
+                                    $motivo = 'SIN VALOR SAEMET';
+                                } elseif (!$depreciacion_valida) {
                                     $estado = 'OMITIDO';
                                     $motivo = 'DEPRECIACION NO CALCULADA';
-                                } elseif ($valor_acumulado >= $valor_neto || ($valor_acumulado + $depreciacion_mensual) > $valor_neto) {
+                                } elseif ($valor_acumulado >= $valor_neto || ($valor_acumulado + $valor_mesual) > $valor_neto) {
                                     $estado = 'OMITIDO';
                                     $motivo = 'VALOR RESIDUAL ALCANZADO';
                                 } else {

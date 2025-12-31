@@ -469,6 +469,7 @@ function generar($aForm = '')
     $anio_hasta = $aForm['anio_hasta'];
     $mes_hasta = $aForm['mes_hasta'];
     $reprocesar = $aForm['reprocesar'];
+    $solo_borrar = $aForm['solo_borrar'] ?? '';
     $fechaServer = date("Y-m-d");
 
     if (empty($anio_desde) || empty($mes_desde) || empty($anio_hasta) || empty($mes_hasta)) {
@@ -568,7 +569,7 @@ function generar($aForm = '')
                     $clave_activo       =     $oIfxA->f('act_clave_act');
                     $nombre_activo      =     $oIfxA->f('act_nom_act');
 
-                    if ($reprocesar === 'S') {
+                    if ($reprocesar === 'S' || $solo_borrar === 'S') {
                         $sql_contar_reproceso = "select count(*) as total
                                 from saecdep
                                 where cdep_cod_acti = $codigo_activo
@@ -584,6 +585,9 @@ function generar($aForm = '')
                         $oIfx->QueryT($sql_delete_reproceso);
                         if ($total_existente > 0) {
                             $total_reprocesados++;
+                        }
+                        if ($solo_borrar === 'S') {
+                            continue;
                         }
                     }
 

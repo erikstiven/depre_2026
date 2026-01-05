@@ -251,6 +251,7 @@ if ($sucursal === '' || $sucursal === null) {
 			where cdep_cod_acti = $codigoActivo
 			and act_cod_empr = $empresa
 			and act_cod_sucu = $sucursal";
+			debug_log_message($sql_info, $debug);
 			$fecha_depre = consulta_string($sql_info, 'cdep_fec_depr', $oIfx, '');
 			//echo $fecha_depre; exit;
 			$sql_ficha = "select cdep_dep_acum, cdep_gas_depn 

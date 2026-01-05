@@ -254,16 +254,22 @@ if ($sucursal === '' || $sucursal === null) {
 			debug_log_message($sql_info, $debug);
 			$fecha_depre = consulta_string($sql_info, 'cdep_fec_depr', $oIfx, '');
 			//echo $fecha_depre; exit;
-			$sql_ficha = "select cdep_dep_acum, cdep_gas_depn 
-						from saecdep 
-						where saecdep.cdep_cod_acti = $codigoActivo
-						and saecdep.act_cod_empr  = $empresa
-						and saecdep.act_cod_sucu  = $sucursal						
-						and saecdep.cdep_fec_depr = '$fecha_depre'";
-			//echo $sql_ficha; exit;		
-			
-			$dep_acum = consulta_string($sql_ficha, 'cdep_dep_acum', $oIfx, '');
-			$gas_depr = consulta_string($sql_ficha, 'cdep_gas_depn', $oIfx, '');
+			$dep_acum = '';
+			$gas_depr = '';
+			if (!empty($fecha_depre)) {
+				$sql_ficha = "select cdep_dep_acum, cdep_gas_depn 
+							from saecdep 
+							where saecdep.cdep_cod_acti = $codigoActivo
+							and saecdep.act_cod_empr  = $empresa
+							and saecdep.act_cod_sucu  = $sucursal						
+							and saecdep.cdep_fec_depr = '$fecha_depre'";
+				//echo $sql_ficha; exit;		
+				
+				$dep_acum = consulta_string($sql_ficha, 'cdep_dep_acum', $oIfx, '');
+				$gas_depr = consulta_string($sql_ficha, 'cdep_gas_depn', $oIfx, '');
+			} else {
+				debug_log_message('Activo sin depreciacion registrada en saecdep.', $debug);
+			}
 			//echo $dep_acum; exit;
 			$html.='<table table width="70%"  border="1" align="center" font-family: "Verdana"; >
 						<tr>

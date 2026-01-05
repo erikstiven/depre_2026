@@ -468,6 +468,8 @@ function generar($aForm = '')
     $mes_desde = $aForm['mes_desde'];
     $anio_hasta = $aForm['anio_hasta'];
     $mes_hasta = $aForm['mes_hasta'];
+    $reprocesar = $aForm['reprocesar'];
+    $solo_borrar = $aForm['solo_borrar'] ?? '';
     $fechaServer = date("Y-m-d");
 
     if (empty($anio_desde) || empty($mes_desde) || empty($anio_hasta) || empty($mes_hasta)) {
@@ -549,6 +551,8 @@ function generar($aForm = '')
                 $total_evaluados = 0;
                 $total_procesados = 0;
                 $total_omitidos = 0;
+                $total_reprocesados = 0;
+                $total_eliminados = 0;
                 $alertas_pendientes = [];
                 do {
                     // LEER DATOS AVTIVO
@@ -565,6 +569,51 @@ function generar($aForm = '')
                     $sucursal           =     $oIfxA->f('act_cod_sucu');
                     $clave_activo       =     $oIfxA->f('act_clave_act');
                     $nombre_activo      =     $oIfxA->f('act_nom_act');
+
+                    if ($reprocesar === 'S' || $solo_borrar === 'S') {
+                        $sql_contar_reproceso = "select count(*) as total
+                                from saecdep
+                                where cdep_cod_acti = $codigo_activo
+                                  and act_cod_empr = $empresa
+                                  and act_cod_sucu = $sucursal
+                                  and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
+                        $total_existente = intval(consulta_string($sql_contar_reproceso, 'total', $oIfx, 0));
+                        $sql_delete_reproceso = "delete from saecdep
+                                where cdep_cod_acti = $codigo_activo
+                                  and act_cod_empr = $empresa
+                                  and act_cod_sucu = $sucursal
+                                  and ((cdep_ani_depr * 100) + cdep_mes_depr) between $periodo_inicio and $periodo_fin";
+                        $oIfx->QueryT($sql_delete_reproceso);
+                        if ($total_existente > 0) {
+                            $total_reprocesados++;
+                        }
+                        if ($solo_borrar === 'S') {
+                            if ($total_existente > 0) {
+                                $total_eliminados++;
+                                $audit_log[] = [
+                                    'activo' => $clave_activo,
+                                    'nombre' => $nombre_activo,
+                                    'anio' => '',
+                                    'mes' => '',
+                                    'estado' => 'ELIMINADO',
+                                    'motivo' => 'REGISTROS BORRADOS: ' . $total_existente,
+                                    'estado_contable' => 'OK',
+                                ];
+                                $total_evaluados += $total_existente;
+                            } else {
+                                $audit_log[] = [
+                                    'activo' => $clave_activo,
+                                    'nombre' => $nombre_activo,
+                                    'anio' => '',
+                                    'mes' => '',
+                                    'estado' => 'SIN CAMBIOS',
+                                    'motivo' => 'SIN REGISTROS EN RANGO',
+                                    'estado_contable' => 'OK',
+                                ];
+                            }
+                            continue;
+                        }
+                    }
 
                     $intervalo = $arrayTipoDepre[$tipo_depreciacion] ?? '';
                     if (empty($intervalo)) {
@@ -696,10 +745,13 @@ function generar($aForm = '')
                                     $valor_anterior = $valor_acumulado - $valor_mesual;
                                 }
 
-                                if (!$depreciacion_valida) {
+                                if ($valor_mesual <= 0) {
+                                    $estado = 'OMITIDO';
+                                    $motivo = 'SIN VALOR SAEMET';
+                                } elseif (!$depreciacion_valida) {
                                     $estado = 'OMITIDO';
                                     $motivo = 'DEPRECIACION NO CALCULADA';
-                                } elseif ($valor_acumulado >= $valor_neto || ($valor_acumulado + $depreciacion_mensual) > $valor_neto) {
+                                } elseif ($valor_acumulado >= $valor_neto || ($valor_acumulado + $valor_mesual) > $valor_neto) {
                                     $estado = 'OMITIDO';
                                     $motivo = 'VALOR RESIDUAL ALCANZADO';
                                 } else {
@@ -741,11 +793,13 @@ function generar($aForm = '')
                 foreach ($audit_log as $fila) {
                     $clase_estado = $fila['estado'] === 'PROCESADO' ? 'label label-success' : 'label label-warning';
                     $clase_contable = $fila['estado_contable'] === 'OK' ? 'label label-success' : 'label label-danger';
+                    $anio_mostrar = $fila['anio'] === '' ? '--' : $fila['anio'];
+                    $mes_mostrar = $fila['mes'] === '' ? '--' : str_pad($fila['mes'], 2, '0', STR_PAD_LEFT);
                     $tabla_detalle .= '<tr>'
                         . '<td>' . htmlspecialchars($fila['activo'], ENT_QUOTES, 'UTF-8') . '</td>'
                         . '<td>' . htmlspecialchars($fila['nombre'], ENT_QUOTES, 'UTF-8') . '</td>'
-                        . '<td>' . $fila['anio'] . '</td>'
-                        . '<td>' . str_pad($fila['mes'], 2, '0', STR_PAD_LEFT) . '</td>'
+                        . '<td>' . $anio_mostrar . '</td>'
+                        . '<td>' . $mes_mostrar . '</td>'
                         . '<td><span class="' . $clase_estado . '">' . $fila['estado'] . '</span></td>'
                         . '<td>' . htmlspecialchars($fila['motivo'], ENT_QUOTES, 'UTF-8') . '</td>'
                         . '<td><span class="' . $clase_contable . '">' . $fila['estado_contable'] . '</span></td>'
@@ -765,6 +819,8 @@ function generar($aForm = '')
                     . '<p><strong>Meses evaluados:</strong> ' . $total_evaluados . '</p>'
                     . '<p><strong>Procesados:</strong> ' . $total_procesados . '</p>'
                     . '<p><strong>Omitidos:</strong> ' . $total_omitidos . '</p>'
+                    . '<p><strong>Activos con reproceso:</strong> ' . $total_reprocesados . '</p>'
+                    . '<p><strong>Activos con eliminación:</strong> ' . $total_eliminados . '</p>'
                     . '</div>'
                     . '</div>'
                     . $alerta_html
@@ -791,6 +847,8 @@ function generar($aForm = '')
                     . '<p><strong>Meses evaluados:</strong> 0</p>'
                     . '<p><strong>Procesados:</strong> 0</p>'
                     . '<p><strong>Omitidos:</strong> 0</p>'
+                    . '<p><strong>Activos con reproceso:</strong> 0</p>'
+                    . '<p><strong>Activos con eliminación:</strong> 0</p>'
                     . '</div>'
                     . '</div>'
                     . '<div class="table-responsive" style="max-height: 300px; overflow: auto;">'

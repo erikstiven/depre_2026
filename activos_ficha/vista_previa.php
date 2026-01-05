@@ -8,6 +8,7 @@ if ($debug) {
     ini_set('display_errors', '1');
     ini_set('display_startup_errors', '1');
     error_reporting(E_ALL);
+    ob_start();
 }
 
 function debug_log_message($message, $debug) {
@@ -16,6 +17,28 @@ function debug_log_message($message, $debug) {
     }
     error_log('[activos_ficha] ' . $message);
     echo '<script>console.error(' . json_encode($message) . ');</script>';
+}
+
+function query_or_log($db, $sql, $debug, $label = 'SQL') {
+    $ok = $db->Query($sql);
+    if (!$ok) {
+        $error = method_exists($db, 'Error') ? $db->Error() : 'Query failed';
+        debug_log_message($label . ': ' . $error . ' | ' . $sql, $debug);
+    }
+    return $ok;
+}
+
+if ($debug) {
+    set_error_handler(function ($severity, $message, $file, $line) use ($debug) {
+        debug_log_message("PHP error [$severity] $message in $file:$line", $debug);
+        return false;
+    });
+    register_shutdown_function(function () use ($debug) {
+        $error = error_get_last();
+        if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            debug_log_message("PHP fatal error: {$error['message']} in {$error['file']}:{$error['line']}", $debug);
+        }
+    });
 }
 
 if (session_status() !== PHP_SESSION_ACTIVE) {session_start();}
@@ -128,7 +151,7 @@ if ($sucursal === '' || $sucursal === null) {
 	$html = '';
     $sql = "select empr_nom_empr, empr_ruc_empr , empr_dir_empr, empr_conta_sn, empr_num_resu, empr_path_logo, empr_iva_empr
             from saeempr where empr_cod_empr = $empresa ";
-    if ($oIfx->Query($sql)) {
+    if (query_or_log($oIfx, $sql, $debug, 'Empresa')) {
         if ($oIfx->NumFilas() > 0) {
             $razonSocial = trim($oIfx->f('empr_nom_empr'));
             $ruc_empr = $oIfx->f('empr_ruc_empr');
@@ -148,7 +171,7 @@ if ($sucursal === '' || $sucursal === null) {
 	
     //  AMBIENTE - EMISION
     $sql = "select sucu_tip_ambi, sucu_tip_emis  from saesucu where sucu_cod_empr = $empresa and sucu_cod_sucu = $sucursal ";
-    if ($oIfx->Query($sql)) {
+    if (query_or_log($oIfx, $sql, $debug, 'Sucursal')) {
         if ($oIfx->NumFilas() > 0) {
             $ambiente_sri = $oIfx->f('sucu_tip_ambi');
             $emision_sri = $oIfx->f('sucu_tip_emis');
@@ -181,7 +204,7 @@ if ($sucursal === '' || $sucursal === null) {
 
     //selecciona sucursales y direcciones
     $sql_sucu = "select sucu_nom_sucu, sucu_dir_sucu from saesucu where sucu_cod_empr = $empresa and sucu_cod_sucu = $sucursal ";
-    if ($oIfx->Query($sql_sucu)) {
+    if (query_or_log($oIfx, $sql_sucu, $debug, 'Sucursal direccion')) {
         if ($oIfx->NumFilas() > 0) {
             do {
                 $sucu_nom_sucu = $oIfx->f('sucu_nom_sucu');
@@ -220,7 +243,7 @@ if ($sucursal === '' || $sucursal === null) {
 			and act_cod_sucu = $sucursal";
 	//echo $sql; exit;
 	
-	if($oIfxA->Query($sql)){
+	if(query_or_log($oIfxA, $sql, $debug, 'Activo')){
 		if($oIfxA->NumFilas() > 0){	
 			// ULTIMOS DATOS DE DEPRECIACION
 			$sql_info = "select max(cdep_fec_depr) as cdep_fec_depr
@@ -370,7 +393,7 @@ if ($sucursal === '' || $sucursal === null) {
 					where gasd_cod_cuen = cuen_cod_cuen
 					and gasd_cod_empr = cuen_cod_empr
 					and gasd_cod_acti = $codigoActivo ";
-	if($oIfx->Query($sql_cuentas)){
+	if(query_or_log($oIfx, $sql_cuentas, $debug, 'Cuentas gasto')){
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center" font-family: "Trebuchet MS", Verdana;>
 					<tr>
@@ -415,7 +438,7 @@ if ($sucursal === '' || $sucursal === null) {
 							 ( saecxa.act_cod_empr = $empresa ) AND  
 							 ( saecxa.act_cod_sucu = $sucursal )";
 	//echo $sql_custodios; exit;						 
-	if($oIfx->Query($sql_custodios)){
+	if(query_or_log($oIfx, $sql_custodios, $debug, 'Responsables')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center">
@@ -458,7 +481,7 @@ if ($sucursal === '' || $sucursal === null) {
 					   WHERE act_cod_act = $codigoActivo  AND  
 							 act_cod_empr = $empresa  AND  
 							 act_cod_sucu = $sucursal ";
-	if($oIfx->Query($sql_manteni)){
+	if(query_or_log($oIfx, $sql_manteni, $debug, 'Mantenimiento')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center">
@@ -507,7 +530,7 @@ if ($sucursal === '' || $sucursal === null) {
 							 ( saesac.act_cod_act = $codigoActivo ) AND  
 							 ( saesac.act_cod_empr = $empresa) AND  
 							 ( saesac.act_cod_sucu = $sucursal )";
-	if($oIfx->Query($sql_manteni)){
+	if(query_or_log($oIfx, $sql_manteni, $debug, 'Aseguradoras')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<br> </br>

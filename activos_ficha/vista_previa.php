@@ -3,6 +3,44 @@ include_once('../../Include/config.inc.php');
 include_once(path(DIR_INCLUDE).'conexiones/db_conexion.php');
 include_once(path(DIR_INCLUDE).'comun.lib.php');
 
+$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
+if ($debug) {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+    ob_start();
+}
+
+function debug_log_message($message, $debug) {
+    if (!$debug) {
+        return;
+    }
+    error_log('[activos_ficha] ' . $message);
+    echo '<script>console.error(' . json_encode($message) . ');</script>';
+}
+
+function query_or_log($db, $sql, $debug, $label = 'SQL') {
+    $ok = $db->Query($sql);
+    if (!$ok) {
+        $error = method_exists($db, 'Error') ? $db->Error() : 'Query failed';
+        debug_log_message($label . ': ' . $error . ' | ' . $sql, $debug);
+    }
+    return $ok;
+}
+
+if ($debug) {
+    set_error_handler(function ($severity, $message, $file, $line) use ($debug) {
+        debug_log_message("PHP error [$severity] $message in $file:$line", $debug);
+        return false;
+    });
+    register_shutdown_function(function () use ($debug) {
+        $error = error_get_last();
+        if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            debug_log_message("PHP fatal error: {$error['message']} in {$error['file']}:{$error['line']}", $debug);
+        }
+    });
+}
+
 if (session_status() !== PHP_SESSION_ACTIVE) {session_start();}
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -79,17 +117,41 @@ $oIfxA->Conectar();
 $empresa      = $_SESSION['U_EMPRESA'];
 // $sucursal      = $_SESSION['U_SUCURSAL'];
 
-$codigoActivo       = $_GET['codigo'];
+if (!isset($_GET['codigo']) || $_GET['codigo'] === '' || !ctype_digit((string)$_GET['codigo'])) {
+    http_response_code(400);
+    $message = 'Parametro codigo invalido o ausente.';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Solicitud invalida.';
+    exit;
+}
+
+if (empty($empresa)) {
+    http_response_code(500);
+    $message = 'Sesion sin empresa activa (U_EMPRESA).';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Error de sesion.';
+    exit;
+}
+
+$codigoActivo       = (int)$_GET['codigo'];
 //echo $codigoActivo;
 $sql = "select act_cod_sucu from saeact where act_cod_empr = $empresa and act_cod_act = $codigoActivo ";
+debug_log_message($sql, $debug);
 $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,''); 	
+if ($sucursal === '' || $sucursal === null) {
+    http_response_code(404);
+    $message = 'Activo sin sucursal asociada (act_cod_sucu).';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Activo sin sucursal.';
+    exit;
+}
 			
 //////////
 
 	$html = '';
     $sql = "select empr_nom_empr, empr_ruc_empr , empr_dir_empr, empr_conta_sn, empr_num_resu, empr_path_logo, empr_iva_empr
             from saeempr where empr_cod_empr = $empresa ";
-    if ($oIfx->Query($sql)) {
+    if (query_or_log($oIfx, $sql, $debug, 'Empresa')) {
         if ($oIfx->NumFilas() > 0) {
             $razonSocial = trim($oIfx->f('empr_nom_empr'));
             $ruc_empr = $oIfx->f('empr_ruc_empr');
@@ -109,7 +171,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 	
     //  AMBIENTE - EMISION
     $sql = "select sucu_tip_ambi, sucu_tip_emis  from saesucu where sucu_cod_empr = $empresa and sucu_cod_sucu = $sucursal ";
-    if ($oIfx->Query($sql)) {
+    if (query_or_log($oIfx, $sql, $debug, 'Sucursal')) {
         if ($oIfx->NumFilas() > 0) {
             $ambiente_sri = $oIfx->f('sucu_tip_ambi');
             $emision_sri = $oIfx->f('sucu_tip_emis');
@@ -142,7 +204,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 
     //selecciona sucursales y direcciones
     $sql_sucu = "select sucu_nom_sucu, sucu_dir_sucu from saesucu where sucu_cod_empr = $empresa and sucu_cod_sucu = $sucursal ";
-    if ($oIfx->Query($sql_sucu)) {
+    if (query_or_log($oIfx, $sql_sucu, $debug, 'Sucursal direccion')) {
         if ($oIfx->NumFilas() > 0) {
             do {
                 $sucu_nom_sucu = $oIfx->f('sucu_nom_sucu');
@@ -181,7 +243,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 			and act_cod_sucu = $sucursal";
 	//echo $sql; exit;
 	
-	if($oIfxA->Query($sql)){
+	if(query_or_log($oIfxA, $sql, $debug, 'Activo')){
 		if($oIfxA->NumFilas() > 0){	
 			// ULTIMOS DATOS DE DEPRECIACION
 			$sql_info = "select max(cdep_fec_depr) as cdep_fec_depr
@@ -189,18 +251,25 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 			where cdep_cod_acti = $codigoActivo
 			and act_cod_empr = $empresa
 			and act_cod_sucu = $sucursal";
+			debug_log_message($sql_info, $debug);
 			$fecha_depre = consulta_string($sql_info, 'cdep_fec_depr', $oIfx, '');
 			//echo $fecha_depre; exit;
-			$sql_ficha = "select cdep_dep_acum, cdep_gas_depn 
-						from saecdep 
-						where saecdep.cdep_cod_acti = $codigoActivo
-						and saecdep.act_cod_empr  = $empresa
-						and saecdep.act_cod_sucu  = $sucursal						
-						and saecdep.cdep_fec_depr = '$fecha_depre'";
-			//echo $sql_ficha; exit;		
-			
-			$dep_acum = consulta_string($sql_ficha, 'cdep_dep_acum', $oIfx, '');
-			$gas_depr = consulta_string($sql_ficha, 'cdep_gas_depn', $oIfx, '');
+			$dep_acum = '';
+			$gas_depr = '';
+			if (!empty($fecha_depre)) {
+				$sql_ficha = "select cdep_dep_acum, cdep_gas_depn 
+							from saecdep 
+							where saecdep.cdep_cod_acti = $codigoActivo
+							and saecdep.act_cod_empr  = $empresa
+							and saecdep.act_cod_sucu  = $sucursal						
+							and saecdep.cdep_fec_depr = '$fecha_depre'";
+				//echo $sql_ficha; exit;		
+				
+				$dep_acum = consulta_string($sql_ficha, 'cdep_dep_acum', $oIfx, '');
+				$gas_depr = consulta_string($sql_ficha, 'cdep_gas_depn', $oIfx, '');
+			} else {
+				debug_log_message('Activo sin depreciacion registrada en saecdep.', $debug);
+			}
 			//echo $dep_acum; exit;
 			$html.='<table table width="70%"  border="1" align="center" font-family: "Verdana"; >
 						<tr>
@@ -331,7 +400,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 					where gasd_cod_cuen = cuen_cod_cuen
 					and gasd_cod_empr = cuen_cod_empr
 					and gasd_cod_acti = $codigoActivo ";
-	if($oIfx->Query($sql_cuentas)){
+	if(query_or_log($oIfx, $sql_cuentas, $debug, 'Cuentas gasto')){
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center" font-family: "Trebuchet MS", Verdana;>
 					<tr>
@@ -376,7 +445,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 							 ( saecxa.act_cod_empr = $empresa ) AND  
 							 ( saecxa.act_cod_sucu = $sucursal )";
 	//echo $sql_custodios; exit;						 
-	if($oIfx->Query($sql_custodios)){
+	if(query_or_log($oIfx, $sql_custodios, $debug, 'Responsables')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center">
@@ -419,7 +488,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 					   WHERE act_cod_act = $codigoActivo  AND  
 							 act_cod_empr = $empresa  AND  
 							 act_cod_sucu = $sucursal ";
-	if($oIfx->Query($sql_manteni)){
+	if(query_or_log($oIfx, $sql_manteni, $debug, 'Mantenimiento')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<table width="95%"  border="1" align="center">
@@ -468,7 +537,7 @@ $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,'');
 							 ( saesac.act_cod_act = $codigoActivo ) AND  
 							 ( saesac.act_cod_empr = $empresa) AND  
 							 ( saesac.act_cod_sucu = $sucursal )";
-	if($oIfx->Query($sql_manteni)){
+	if(query_or_log($oIfx, $sql_manteni, $debug, 'Aseguradoras')){
 	
 		if($oIfx->NumFilas() > 0){	
 			$html.='<br> </br>

@@ -3,6 +3,21 @@ include_once('../../Include/config.inc.php');
 include_once(path(DIR_INCLUDE).'conexiones/db_conexion.php');
 include_once(path(DIR_INCLUDE).'comun.lib.php');
 
+$debug = isset($_GET['debug']) && $_GET['debug'] === '1';
+if ($debug) {
+    ini_set('display_errors', '1');
+    ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+}
+
+function debug_log_message($message, $debug) {
+    if (!$debug) {
+        return;
+    }
+    error_log('[activos_ficha] ' . $message);
+    echo '<script>console.error(' . json_encode($message) . ');</script>';
+}
+
 if (session_status() !== PHP_SESSION_ACTIVE) {session_start();}
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -79,10 +94,34 @@ $oIfxA->Conectar();
 $empresa      = $_SESSION['U_EMPRESA'];
 // $sucursal      = $_SESSION['U_SUCURSAL'];
 
-$codigoActivo       = $_GET['codigo'];
+if (!isset($_GET['codigo']) || $_GET['codigo'] === '' || !ctype_digit((string)$_GET['codigo'])) {
+    http_response_code(400);
+    $message = 'Parametro codigo invalido o ausente.';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Solicitud invalida.';
+    exit;
+}
+
+if (empty($empresa)) {
+    http_response_code(500);
+    $message = 'Sesion sin empresa activa (U_EMPRESA).';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Error de sesion.';
+    exit;
+}
+
+$codigoActivo       = (int)$_GET['codigo'];
 //echo $codigoActivo;
 $sql = "select act_cod_sucu from saeact where act_cod_empr = $empresa and act_cod_act = $codigoActivo ";
+debug_log_message($sql, $debug);
 $sucursal = consulta_string_func($sql,'act_cod_sucu', $oIfx,''); 	
+if ($sucursal === '' || $sucursal === null) {
+    http_response_code(404);
+    $message = 'Activo sin sucursal asociada (act_cod_sucu).';
+    debug_log_message($message, $debug);
+    echo $debug ? $message : 'Activo sin sucursal.';
+    exit;
+}
 			
 //////////
 
